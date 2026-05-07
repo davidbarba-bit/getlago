@@ -58,6 +58,7 @@ services:
       - "3000:3000"
     volumes:
       - lago_storage_data:/app/storage
+      - ./scripts/start.sh:/app/scripts/start.sh:ro
 
   front:
     image: getlago/front:${LAGO_VERSION:-v1.17.0}
@@ -71,6 +72,8 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
     ports:
       - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
 
   sidekiq:
     image: getlago/api:${LAGO_VERSION:-v1.17.0}
