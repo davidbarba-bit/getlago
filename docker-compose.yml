@@ -1,0 +1,115 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:14-alpine
+    container_name: lago_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-lago}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-lago}
+    volumes:
+      - lago_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-lago}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: lago_redis
+    restart: unless-stopped
+    volumes:
+      - lago_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: getlago/api:${LAGO_VERSION:-v1.17.0}
+    container_name: lago_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - LAGO_API_URL=${LAGO_API_URL:-http://localhost:3000}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://lago:changeme@db:5432/lago}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
+      - RAILS_ENV=production
+      - RAILS_LOG_TO_STDOUT=true
+      - LAGO_FROM_EMAIL=${LAGO_FROM_EMAIL:-noreply@yourdomain.com}
+      - LAGO_FRONT_URL=${LAGO_FRONT_URL:-http://localhost}
+      - LAGO_RSA_PRIVATE_KEY=${LAGO_RSA_PRIVATE_KEY}
+      - ENCRYPTION_PRIMARY_KEY=${ENCRYPTION_PRIMARY_KEY}
+      - ENCRYPTION_DETERMINISTIC_KEY=${ENCRYPTION_DETERMINISTIC_KEY}
+      - ENCRYPTION_KEY_DERIVATION_SALT=${ENCRYPTION_KEY_DERIVATION_SALT}
+      - LAGO_PDF_URL=${LAGO_PDF_URL:-http://pdf:3000}
+      - LAGO_USE_AWS_S3=${LAGO_USE_AWS_S3:-false}
+      - SIDEKIQ_CONCURRENCY=${SIDEKIQ_CONCURRENCY:-10}
+    ports:
+      - "3000:3000"
+    volumes:
+      - lago_storage_data:/app/storage
+
+  front:
+    image: getlago/front:${LAGO_VERSION:-v1.17.0}
+    container_name: lago_front
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      - API_URL=${LAGO_API_URL:-http://localhost:3000}
+      - LAGO_DISABLE_SIGNUP=${LAGO_DISABLE_SIGNUP:-false}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    ports:
+      - "80:80"
+
+  sidekiq:
+    image: getlago/api:${LAGO_VERSION:-v1.17.0}
+    container_name: lago_sidekiq
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["bundle", "exec", "sidekiq"]
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://lago:changeme@db:5432/lago}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - SECRET_KEY_BASE=${SECRET_KEY_BASE}
+      - RAILS_ENV=production
+      - RAILS_LOG_TO_STDOUT=true
+      - LAGO_API_URL=${LAGO_API_URL:-http://localhost:3000}
+      - LAGO_FROM_EMAIL=${LAGO_FROM_EMAIL:-noreply@yourdomain.com}
+      - LAGO_RSA_PRIVATE_KEY=${LAGO_RSA_PRIVATE_KEY}
+      - ENCRYPTION_PRIMARY_KEY=${ENCRYPTION_PRIMARY_KEY}
+      - ENCRYPTION_DETERMINISTIC_KEY=${ENCRYPTION_DETERMINISTIC_KEY}
+      - ENCRYPTION_KEY_DERIVATION_SALT=${ENCRYPTION_KEY_DERIVATION_SALT}
+      - LAGO_PDF_URL=${LAGO_PDF_URL:-http://pdf:3000}
+      - LAGO_USE_AWS_S3=${LAGO_USE_AWS_S3:-false}
+      - SIDEKIQ_CONCURRENCY=${SIDEKIQ_CONCURRENCY:-10}
+    volumes:
+      - lago_storage_data:/app/storage
+
+  pdf:
+    image: getlago/lago-gotenberg:7
+    container_name: lago_pdf
+    restart: unless-stopped
+    command:
+      - "gotenberg"
+      - "--chromium-disable-routes=true"
+      - "--libreoffice-disable-routes=true"
+
+volumes:
+  lago_postgres_data:
+  lago_redis_data:
+  lago_storage_data:
