@@ -1,0 +1,3 @@
+FROM getlago/api:v1.17.0
+COPY scripts/start.sh /app/scripts/start.sh
+RUN chmod +x /app/scripts/start.sh

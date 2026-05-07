@@ -1,0 +1,2 @@
+FROM getlago/front:v1.17.0
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
